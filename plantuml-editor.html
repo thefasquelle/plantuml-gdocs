@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    
+    <? 
+      // Freeze dependency versions
+      const PLANTUML_VERSION = "1.2026.8";
+      const FFLATE_VERSION   = "0.8.3";
+    ?>
+    
+    <!-- Load the official PlantUML CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@plantuml/core@<?= PLANTUML_VERSION ?>/main.css">
+    <style>
+      /* Additional styles for the new buttons and layout */
+      .action-buttons {
+        display: flex;
+        gap: 8px;
+        margin-left: auto;
+      }
+      .btn-primary {
+        background-color: #1a73e8;
+        color: white;
+        border: none;
+        padding: 6px 16px;
+        border-radius: 4px;
+        font-weight: 500;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .btn-primary:hover { background-color: #1557b0; }
+      .btn-secondary {
+        background-color: transparent;
+        color: var(--fg);
+        border: 1px solid var(--border);
+        padding: 6px 16px;
+        border-radius: 4px;
+        font-weight: 500;
+        cursor: pointer;
+      }
+      .btn-secondary:hover { background-color: var(--bg-hover); }
+      
+      /* Modify the controls bar to hold everything nicely */
+      .controls {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 16px;
+        background: var(--bg);
+        border-top: 1px solid var(--border);
+      }
+      .icon-group {
+        display: flex;
+        gap: 4px;
+      }
+    </style>
+  </head>
+  <body>
+
+    <main>
+      <!-- We inject the initial source code via Apps Script templating -->
+      <textarea id="editor" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Start writing..."><?!= initialSource || '@startuml\nAlice->Bob : Hello\nreturn ok\n@enduml' ?></textarea>
+
+      <div id="resize"></div>
+
+      <div class="preview">
+        <div class="zoom-controls" role="group" aria-label="Diagram zoom">
+          <button id="zoom-out" type="button" title="Zoom out" aria-label="Zoom out">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg>
+          </button>
+          <button id="zoom-reset" class="zoom-level" type="button" title="Reset zoom">100%</button>
+          <button id="zoom-in" type="button" title="Zoom in" aria-label="Zoom in">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+          <button id="pan-tool" type="button" title="Pan tool" aria-label="Pan tool" aria-pressed="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 11V6a2 2 0 0 0-4 0v5M14 10V4a2 2 0 0 0-4 0v7M10 10V6a2 2 0 0 0-4 0v8M6 13l-1.2-1.2a2 2 0 0 0-2.8 2.8l5.2 5.2A4 4 0 0 0 10 21h4a6 6 0 0 0 6-6V8a2 2 0 0 0-4 0v3"/></svg>
+          </button>
+        </div>
+        
+        <div id="loading">
+          <span class="loading-dot"></span><span class="loading-dot"></span><span class="loading-dot"></span>
+        </div>
+
+        <div id="out"></div>
+        <div id="status"></div>
+        
+        <div class="controls">
+          <div class="icon-group">
+            <button id="theme" type="button" title="Toggle dark mode">
+              <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+              </svg>
+              <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+              </svg>
+            </button>
+            <button id="copy-svg" type="button" title="Copy SVG to clipboard">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+              </svg>
+            </button>
+            <button id="copy-png" type="button" title="Copy PNG to clipboard">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21,15 16,10 5,21"/>
+              </svg>
+            </button>
+            <button id="dl-svg" type="button" title="Download SVG">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+            </button>
+            <button id="dl-png" type="button" title="Download PNG">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                <!-- Add a little "P" text indicator to differentiate from SVG dl -->
+                <text x="16" y="21" font-size="8" fill="currentColor" stroke="none">P</text>
+              </svg>
+            </button>
+          </div>
+          
+          <div class="action-buttons">
+            <button id="btn-cancel" class="btn-primary" type="button">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="6" y1="6" x2="17" y2="17" stroke="black" />
+                <line x1="6" y1="17" x2="17" y2="6" stroke="black" />
+              </svg>
+              Cancel
+            </button>
+            <button id="btn-insert" class="btn-primary" type="button">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              Insert
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
+    <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/fflate@<?= FFLATE_VERSION ?>/umd/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@plantuml/core@<?= PLANTUML_VERSION ?>/viz-global.min.js"></script>
+    <script>
+      // this has been copied from plantuml.github.io deployment when src URL changed from demo server to proper CDN.
+      // this is because the originalsource file, zoom.js, is not included in the package.
+
+      const MIN_ZOOM = 0.25;
+      const MAX_ZOOM = 4;
+      const BUTTON_STEP = 0.25;
+      const WHEEL_STEP = 0.05;
+
+      function createZoomController({viewport, zoomOut, zoomReset, zoomIn, panToggle}) {
+        let zoom = 1;
+        let panEnabled = false;
+        let panning = null;
+        const platform = navigator.userAgentData?.platform || navigator.platform;
+        const platformKey = /Mac|iPhone|iPad|iPod/i.test(platform)
+          ? "Command"
+          : /Win/i.test(platform) ? "Windows" : "Meta";
+
+        zoomReset.title = `Reset zoom; use ${platformKey}+wheel over the diagram to zoom`;
+        panToggle.title = `Pan tool; drag or hold ${platformKey} while dragging`;
+
+        function updateControls() {
+          const percentage = Math.round(zoom * 100);
+          zoomReset.textContent = `${percentage}%`;
+          zoomReset.setAttribute("aria-label", `Reset zoom (currently ${percentage}%)`);
+          zoomOut.disabled = zoom <= MIN_ZOOM;
+          zoomIn.disabled = zoom >= MAX_ZOOM;
+        }
+
+        function setZoom(nextZoom, clientX, clientY) {
+          nextZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, nextZoom));
+          nextZoom = Math.round(nextZoom * 100) / 100;
+          if (nextZoom === zoom) {
+            return;
+          }
+
+          const rect = viewport.getBoundingClientRect();
+          const offsetX = clientX == null ? viewport.clientWidth / 2 : clientX - rect.left;
+          const offsetY = clientY == null ? viewport.clientHeight / 2 : clientY - rect.top;
+          const contentX = viewport.scrollLeft + offsetX;
+          const contentY = viewport.scrollTop + offsetY;
+          const ratio = nextZoom / zoom;
+
+          zoom = nextZoom;
+          viewport.style.setProperty("--preview-zoom", zoom);
+          // Force the new scaled dimensions to be calculated before restoring the
+          // point under the cursor.
+          void viewport.scrollWidth;
+          viewport.scrollLeft = contentX * ratio - offsetX;
+          viewport.scrollTop = contentY * ratio - offsetY;
+          updateControls();
+        }
+
+        function platformPanActive(event = {}) {
+          return Boolean(event.metaKey);
+        }
+
+        function updatePanCursor(event) {
+          viewport.classList.toggle("pan-ready", panEnabled || platformPanActive(event));
+          panToggle.classList.toggle("active", panEnabled);
+          panToggle.setAttribute("aria-pressed", String(panEnabled));
+        }
+
+        function stopPanning(event) {
+          if (panning == null || (event?.pointerId != null && event.pointerId !== panning.pointerId)) {
+            return;
+          }
+          panning = null;
+          viewport.classList.remove("panning");
+          updatePanCursor(event);
+        }
+
+        zoomOut.addEventListener("click", () => setZoom(zoom - BUTTON_STEP));
+        zoomReset.addEventListener("click", () => setZoom(1));
+        zoomIn.addEventListener("click", () => setZoom(zoom + BUTTON_STEP));
+        panToggle.addEventListener("click", () => {
+          panEnabled = !panEnabled;
+          updatePanCursor();
+        });
+        viewport.addEventListener("wheel", event => {
+          if (event.deltaY === 0 || !event.metaKey) {
+            return;
+          }
+          event.preventDefault();
+          const direction = event.deltaY < 0 ? 1 : -1;
+          setZoom(zoom + direction * WHEEL_STEP, event.clientX, event.clientY);
+        }, {passive: false});
+        viewport.addEventListener("pointerdown", event => {
+          if (event.target instanceof Element && event.target.closest(".zoom-controls")) {
+            return;
+          }
+          if (event.button !== 0 || (!panEnabled && !platformPanActive(event))) {
+            return;
+          }
+
+          event.preventDefault();
+          panning = {
+            pointerId: event.pointerId,
+            clientX: event.clientX,
+            clientY: event.clientY,
+            scrollLeft: viewport.scrollLeft,
+            scrollTop: viewport.scrollTop
+          };
+          viewport.setPointerCapture(event.pointerId);
+          viewport.classList.add("panning");
+        });
+        viewport.addEventListener("pointermove", event => {
+          if (panning == null || event.pointerId !== panning.pointerId) {
+            return;
+          }
+          viewport.scrollLeft = panning.scrollLeft - (event.clientX - panning.clientX);
+          viewport.scrollTop = panning.scrollTop - (event.clientY - panning.clientY);
+        });
+        viewport.addEventListener("pointerup", stopPanning);
+        viewport.addEventListener("pointercancel", stopPanning);
+        viewport.addEventListener("lostpointercapture", stopPanning);
+        window.addEventListener("keydown", event => {
+          if (event.key === "Meta" || event.key === "OS") {
+            updatePanCursor(event);
+          }
+        });
+        window.addEventListener("keyup", event => {
+          if (event.key === "Meta" || event.key === "OS") {
+            updatePanCursor(event);
+          }
+        });
+        window.addEventListener("blur", () => {
+          stopPanning();
+          updatePanCursor();
+        });
+
+        viewport.style.setProperty("--preview-zoom", zoom);
+        updateControls();
+        updatePanCursor();
+
+        return {
+          get value() {
+            return zoom;
+          },
+          reset() {
+            setZoom(1);
+          }
+        };
+      }
+    </script>
+    <script type="module">
+      import { render } from "https://cdn.jsdelivr.net/npm/@plantuml/core@<?= PLANTUML_VERSION ?>/plantuml.js";
+
+      const editor = document.getElementById("editor");
+      let dark = false;
+      let toastTimer = null;
+
+      renderer();
+      resize();
+      controls();
+      zoomControls();
+
+      function zoomControls() {
+        createZoomController({
+          viewport: document.getElementById("out"),
+          zoomOut: document.getElementById("zoom-out"),
+          zoomReset: document.getElementById("zoom-reset"),
+          zoomIn: document.getElementById("zoom-in"),
+          panToggle: document.getElementById("pan-tool")
+        });
+      }
+
+      function renderer() {
+        const loading = document.getElementById("loading");
+        try {
+          editor.addEventListener("input", renderNow);
+          renderNow();
+          loading.style.display = "none";
+        } catch (err) {
+          console.error("Error", err);
+          loading.textContent = "Error: " + err.message;
+        }
+      }
+
+      function renderNow() {
+        const lines = editor.value.split(/\r\n|\r|\n/);
+        render(lines, "out", {dark: dark});
+      }
+
+      function showToast(message, isError = false) {
+        const toast = document.getElementById("toast");
+        clearTimeout(toastTimer);
+        toast.textContent = message;
+        toast.classList.toggle("error", isError);
+        toast.classList.add("visible");
+        toastTimer = setTimeout(() => toast.classList.remove("visible"), 2000);
+      }
+
+      // Converts the rendered SVG into a canvas and returns a Blob
+      async function generatePngBlob() {
+        const out = document.getElementById("out");
+        const svg = out.querySelector("svg");
+        if (svg == null) throw new Error("No SVG rendered");
+
+        const clone = svg.cloneNode(true);
+        if (clone.getAttribute("xmlns") == null) {
+          clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+        }
+        const svgString = new XMLSerializer().serializeToString(clone);
+        const svgBlob = new Blob([svgString], {type: "image/svg+xml;charset=utf-8"});
+        const url = URL.createObjectURL(svgBlob);
+
+        const rect = svg.getBoundingClientRect();
+        const width = rect.width || svg.viewBox.baseVal.width;
+        const height = rect.height || svg.viewBox.baseVal.height;
+        const ratio = window.devicePixelRatio || 1;
+
+        const img = new Image();
+        img.width = width;
+        img.height = height;
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = () => reject(new Error("Image load failed"));
+          img.src = url;
+        });
+
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.ceil(width * ratio);
+        canvas.height = Math.ceil(height * ratio);
+        const ctx = canvas.getContext("2d");
+        
+        // Use a solid background so the PNG isn't transparent
+        ctx.fillStyle = dark ? "#1e1e1e" : "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.scale(ratio, ratio);
+        ctx.drawImage(img, 0, 0, width, height);
+        URL.revokeObjectURL(url);
+
+        return await new Promise((resolve, reject) => {
+          canvas.toBlob(b => b == null ? reject(new Error("toBlob failed")) : resolve(b), "image/png");
+        });
+      }
+
+      function getSvgContent() {
+        const out = document.getElementById("out");
+        const svg = out.querySelector("svg");
+        if (svg == null) return out.innerHTML;
+        const clone = svg.cloneNode(true);
+        if (clone.getAttribute("xmlns") == null) {
+          clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+        }
+        return new XMLSerializer().serializeToString(clone);
+      }
+
+      // --- PNG tEXt Chunk Injection Logic ---
+      function generateCRC32(buf) {
+        let crc = 0 ^ (-1);
+        for (let i = 0; i < buf.length; i++) {
+          crc ^= buf[i];
+          for (let j = 0; j < 8; j++) {
+            crc = (crc & 1) ? (crc >>> 1) ^ 0xEDB88320 : (crc >>> 1);
+          }
+        }
+        return (crc ^ (-1)) >>> 0;
+      }
+
+      async function injectPlantUmlIntoPng(pngBlob, sourceCode) {
+        const arrayBuffer = await pngBlob.arrayBuffer();
+        const view = new Uint8Array(arrayBuffer);
+        
+        // Create tEXt chunk data: keyword (plantuml) + null byte + source
+        const keyword = "plantuml";
+        const textEncoder = new TextEncoder();
+        const keywordBytes = textEncoder.encode(keyword);
+        const sourceBytes = textEncoder.encode(sourceCode);
+        
+        // Chunk Data: keyword + 0x00 + source
+        const chunkData = new Uint8Array(keywordBytes.length + 1 + sourceBytes.length);
+        chunkData.set(keywordBytes, 0);
+        chunkData[keywordBytes.length] = 0; // Null separator
+        chunkData.set(sourceBytes, keywordBytes.length + 1);
+
+        // Chunk Type: 'tEXt'
+        const chunkType = new Uint8Array([116, 69, 88, 116]); 
+
+        // Chunk Length (4 bytes)
+        const lengthBuffer = new ArrayBuffer(4);
+        new DataView(lengthBuffer).setUint32(0, chunkData.length, false);
+        const lengthBytes = new Uint8Array(lengthBuffer);
+
+        // Calculate CRC32 over Chunk Type + Chunk Data
+        const crcInput = new Uint8Array(4 + chunkData.length);
+        crcInput.set(chunkType, 0);
+        crcInput.set(chunkData, 4);
+        const crcValue = generateCRC32(crcInput);
+        const crcBuffer = new ArrayBuffer(4);
+        new DataView(crcBuffer).setUint32(0, crcValue, false);
+        const crcBytes = new Uint8Array(crcBuffer);
+
+        // Assemble the new chunk: Length + Type + Data + CRC
+        const newChunk = new Uint8Array(4 + 4 + chunkData.length + 4);
+        newChunk.set(lengthBytes, 0);
+        newChunk.set(chunkType, 4);
+        newChunk.set(chunkData, 8);
+        newChunk.set(crcBytes, 8 + chunkData.length);
+
+        // Splice the new chunk into the PNG right after the IHDR chunk
+        // PNG Signature (8) + IHDR length (4) + 'IHDR' (4) + IHDR data (13) + IHDR CRC (4) = 33 bytes
+        const insertionPoint = 33; 
+        
+        const finalPng = new Uint8Array(view.length + newChunk.length);
+        finalPng.set(view.slice(0, insertionPoint), 0);
+        finalPng.set(newChunk, insertionPoint);
+        finalPng.set(view.slice(insertionPoint), insertionPoint + newChunk.length);
+
+        return new Blob([finalPng], { type: 'image/png' });
+      }
+
+      function blobToBase64(blob) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            // Strip the Data URL prefix (data:image/png;base64,) to send pure base64 to Apps Script
+            const base64 = reader.result.split(',')[1];
+            resolve(base64);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      }
+
+      function controls() {
+        // Theme toggle
+        document.getElementById("theme").addEventListener("click", () => {
+          dark = !dark;
+          document.documentElement.classList.toggle("dark", dark);
+          document.documentElement.style.colorScheme = dark ? "dark" : "light";
+          renderNow();
+        });
+
+        // Insert Button (The main action)
+        const insertBtn = document.getElementById("btn-insert");
+        insertBtn.addEventListener("click", async () => {
+          try {
+            insertBtn.disabled = true;
+            insertBtn.innerHTML = "Inserting...";
+            const sourceCode = editor.value;
+            
+            const pngBlob = await generatePngBlob();
+            // Embed the diagram code inside the PNG
+            const embeddedPngBlob = await injectPlantUmlIntoPng(pngBlob, sourceCode);
+            // Convert to base64 for transmission to Google Apps Script
+            const base64Png = await blobToBase64(embeddedPngBlob);
+            
+            // Call the server-side Apps Script function
+            // Note: We also pass the sourceCode directly. Google Docs sometimes strips EXIF/PNG chunks 
+            // from images, so saving the sourceCode to the image's Alt Text on the server side is highly recommended!
+            google.script.run
+              .withSuccessHandler(() => {
+                 google.script.host.close();
+              })
+              .withFailureHandler((error) => {
+                 showToast("Error inserting: " + error.message, true);
+                 insertBtn.disabled = false;
+                 insertBtn.innerHTML = "Insert";
+              })
+              .insertDiagram(base64Png, sourceCode);
+              
+          } catch (err) {
+            console.error(err);
+            showToast("Failed to generate image.", true);
+            insertBtn.disabled = false;
+            insertBtn.innerHTML = "Insert";
+          }
+        });
+
+        // Cancel Button
+        document.getElementById("btn-cancel").addEventListener("click", () => {
+          google.script.host.close();
+        });
+
+        // Copy SVG
+        document.getElementById("copy-svg").addEventListener("click", async () => {
+          try {
+            const content = getSvgContent();
+            await navigator.clipboard.writeText(content);
+            showToast("SVG copied to clipboard");
+          } catch (e) {
+            showToast("Failed to copy SVG", true);
+          }
+        });
+
+        // Copy PNG
+        document.getElementById("copy-png").addEventListener("click", async () => {
+          try {
+            const blob = await generatePngBlob();
+            await navigator.clipboard.write([new ClipboardItem({"image/png": blob})]);
+            showToast("PNG copied to clipboard");
+          } catch (e) {
+            showToast("Failed to copy PNG", true);
+          }
+        });
+
+        // Download SVG
+        document.getElementById("dl-svg").addEventListener("click", () => {
+          const content = getSvgContent();
+          const blob = new Blob([content], {type: "image/svg+xml"});
+          downloadBlob(blob, "diagram.svg");
+        });
+
+        // Download PNG
+        document.getElementById("dl-png").addEventListener("click", async () => {
+          try {
+            const blob = await generatePngBlob();
+            const embeddedBlob = await injectPlantUmlIntoPng(blob, editor.value);
+            downloadBlob(embeddedBlob, "diagram.png");
+          } catch (e) {
+            showToast("Failed to download PNG", true);
+          }
+        });
+        
+        function downloadBlob(blob, filename) {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = filename;
+          a.click();
+          URL.revokeObjectURL(url);
+        }
+      }
+
+      function resize() {
+        const resizer = document.getElementById("resize");
+        let resizingOffset = null;
+        resizer.addEventListener("mousedown", e => {
+          resizingOffset = e.clientX - editor.getBoundingClientRect().right;
+        });
+        document.addEventListener("mouseup", () => (resizingOffset = null));
+        document.addEventListener("mousemove", e => {
+          if (resizingOffset === null) return;
+          let pos = e.clientX - editor.getBoundingClientRect().left - resizingOffset;
+          let clampedPos = Math.min(pos, document.documentElement.clientWidth * 0.85);
+          editor.style.flexBasis = `${clampedPos}px`;
+        });
+      }
+    </script>
+  </body>
+</html>
