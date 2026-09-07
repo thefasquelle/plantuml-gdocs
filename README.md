@@ -8,6 +8,7 @@ Google Docs add-on to insert and modify PlantUML diagrams directly in the docume
 - No data sent to another server
 - Diagram source code is saved directly in document as the image's Alt Text
 - Diagram source code is also saved as png metadata
+- Uses the official js build of the plantuml library: @plantuml/core
 
 # Planed features
 
